@@ -1,0 +1,705 @@
+re 模块笔记  
+> > 注意：python 版本3.7
+## 正则语法部分
+同时支持unicode string 和 8-bit string （bytes）。
+什么是bytes pattern 或者 unicode pattern？
+> > 就是bytes string 和 unicode string
+> > `b"[a-z]+"` 这种就是bytes string
+> > `"[a-z]+"` 默认的就是unicode string ，或者这种写法`u"[a-z]+"`
+不能用bytes pattern 匹配unicode string，就是下面这种方式行不通
+> > ```python
+> > In [566]: re.match(b'foo', 'foobar')
+> > TypeError: cannot use a bytes pattern on a string-like object
+> > ```
+同时不能用unicode pattern 匹配 8-bit string，当然下面这种方式也行不通
+> > ```python
+> > In [567]: re.match('foo', b'foobar')
+> > TypeError: cannot use a string pattern on a bytes-like object
+> > ```
+
+利用反斜杠`\`匹配特殊字符，例如，`.`表示匹配任意字符，但是如果你想匹配字符`.`，需要这么表示`\.`，这样就可以匹配字符`\.`，而不是匹配任意字符。
+但是如果你想匹配`\`这个字符本身呢？你需要这么写`\\\\`，为什么呢？
+因为在python字符串表达中，`\\`表示一个`\`，就是说你想打印`\`，你得这么写：
+```python
+In [217]: print('\\')
+\
+```
+正则表达式识别`\`也需要两个反斜杠表示`\\`，因此需要如果想要匹配`\`就需要pattern string 这么写 `\\\\`。
+
+```python
+In [228]: res = re.match('\\\\', '\\')
+
+In [229]: print (res.group(0))
+\
+```
+
+有没有更加简洁的写法呢？当然，你可以使用raw string 的写法
+```python
+In [247]: res = re.match(r'\\', r"\feng")
+
+In [248]: print(res.group(0))
+\
+```
+但是我发现一个问题， `r"\"` 这种写法就存在问题，在raw string中`"\"`不能单独存在，必需和其它字符一起出现。eg：
+```python
+In [251]: print(r'\')
+  File "<ipython-input-251-84352fdd17be>", line 1
+    print(r'\')
+               ^
+SyntaxError: EOL while scanning string literal
+```
+这么写就没问题：
+```python
+In [254]: print(r'\\')
+\\
+```
+
+所以，如果你想打印单个反斜杠，就必须得这么干：
+```python
+In [255]: print('\\')
+\
+```
+
+## 特殊字符 special characters
+`.`
+(英文点号`.`) 默认情况下，这个符号匹配除了换行符(`\n`)之外的所有字符。关于flag的相关描述，我们后面再统一来说。
+eg: 
+```python
+In [267]: re.match(r'.', "f")
+Out[267]: <re.Match object; span=(0, 1), match='f'>
+
+In [268]: re.match(r'.', "\n")
+None
+In [269]: re.match(r'.', "\r")
+Out[269]: <re.Match object; span=(0, 1), match='\r'>
+```
+
+`^`
+必需从字符串的头部开始匹配。
+eg：
+```python
+In [273]: re.match("^hello", "hello world")
+Out[273]: <re.Match object; span=(0, 5), match='hello'>
+
+In [274]: re.match("^hello", "not hello world")
+None
+```
+
+`$`
+匹配字符串的尾部。
+注意写法，是`world$`, 而不是`$world`
+注意要用**search** 而不是**match**，match是从string开始的位置匹配的。
+```python
+In [279]: re.match("world$", "hello world\n")
+None
+In [280]: re.search("world$", "hello world\n")
+Out[280]: <re.Match object; span=(6, 11), match='world'>
+```
+那么：`foo.$`匹配字符串串 `foo1\nfoo2\n`匹配的结果是什么呢？
+```python
+In [284]: re.search("foo.$", "foo1\nfoo2\n")
+Out[284]: <re.Match object; span=(5, 9), match='foo2'>
+In [292]: re.findall("foo.$", "foo1\nfoo2\n")
+Out[292]: ['foo2']
+```
+从结果来看是匹配了`foo2`，而且**re.findall** 也只能找到`foo2`
+在指定了re.MULTILINE 模式下，再来看下结果：
+```python
+In [293]: re.search("foo.$", "foo1\nfoo2\n", re.MULTILINE)
+Out[293]: <re.Match object; span=(0, 4), match='foo1'>
+
+In [294]: re.findall("foo.$", "foo1\nfoo2\n", re.MULTILINE)
+Out[294]: ['foo1', 'foo2']
+```
+这次可以看到在`re.MULTILINE`模式下，search匹配了``foo1```， **re.findall**成功匹配到了`foo1` 和 `foo2`。
+`*`
+贪婪模式，匹配0个或者多个`*`前面的字符（紧挨着的那个）。eg，`b*` 匹配0个或者个多`b`, 这个是贪婪模式，意思就是有多少匹配多少。eg：`b*` 可以匹配`""`(空字符串)、`b`、`bb` 或者无限多个`b`（必需是连着呢， `bab`这种就不行）。
+ 
+```python
+In [310]: re.search('b*', "") // 匹配空字符串
+Out[310]: <re.Match object; span=(0, 0), match=''>
+
+In [311]: re.search('b*', "b") // 匹配单个字符b
+Out[311]: <re.Match object; span=(0, 1), match='b'>
+
+In [312]: re.search('b*', "bb") // 匹配连个字符bb
+Out[312]: <re.Match object; span=(0, 2), match='bb'>
+
+In [313]: re.search('b*', "bbb")
+Out[313]: <re.Match object; span=(0, 3), match='bbb'>
+
+In [314]: re.search('b*', "bbbbbbbbb")
+Out[314]: <re.Match object; span=(0, 9), match='bbbbbbbbb'>
+```
+
+`+`
+贪婪模式，类似于`*`，但是不同的地方在`+`表示至少匹配一个。
+所以，`b+` 无法匹配空字符串，其它的地方都和`*`一致。
+eg：
+```python
+In [316]: re.search('b+', '')
+None
+```
+
+`?`
+贪婪模式，匹配0个或者1个。所以`b?` 可以匹配`""` 或者`"b"` 
+```python
+In [318]: re.search('b?', '')
+Out[318]: <re.Match object; span=(0, 0), match=''>
+
+In [319]: re.search('b?', 'b')
+Out[319]: <re.Match object; span=(0, 1), match='b'>
+
+In [320]: re.search('b?', 'bbb')
+Out[320]: <re.Match object; span=(0, 1), match='b'>
+```
+
+`*?, +?, ??`
+上面提到的`*`、`+`、`?`都是贪婪模式，都是在各自的规则下匹配尽可能多的字符，但是有时候，这并不符合我们的需求，例如：`<.*>` 在匹配`'<a> b <c>'`，它会匹配真个字符串，但是我们希望它只匹配`<a>`，怎么实现呢？可以使用对应的非贪婪模式。`<.*?>`就可以匹配到`<a>` 而不是整个字符串。
+```python
+In [322]: re.match("<.*>", "<a> b <c>")
+Out[322]: <re.Match object; span=(0, 9), match='<a> b <c>'>
+
+In [323]: re.match("<.*?>", "<a> b <c>")
+Out[323]: <re.Match object; span=(0, 3), match='<a>'>
+```
+
+`{m}`
+指定匹配的前置字符的个数，如果前置字符出现的字符数量小于m，就无法匹配。
+```python
+In [325]: re.match('b{6}', 'bbbbbb') 
+Out[325]: <re.Match object; span=(0, 6), match='bbbbbb'>
+
+In [326]: re.match('b{6}', 'bbbbb') // 字符串中只有5个连续的b，所以，没匹配上
+None
+```
+
+`{m,n}`
+指定匹配前置字符的个数（范围为\>=m, \<=n），尽可能多的匹配。eg: `a{3,5}` 会匹配3到5个字符`a`。如果m缺省（`{,n}`）, 等同于`{0,n}`。如果n没填，等同于`{m,+∞}`。
+```python
+In [328]: re.match('a{3,5}', 'aaa')
+Out[328]: <re.Match object; span=(0, 3), match='aaa'>
+
+In [329]: re.match('a{3,5}', 'aaaa')
+Out[329]: <re.Match object; span=(0, 4), match='aaaa'>
+
+In [330]: re.match('a{3,5}', 'aaaaa')
+Out[330]: <re.Match object; span=(0, 5), match='aaaaa'>
+
+In [331]: re.match('a{3,5}', 'aaaaaa')
+Out[331]: <re.Match object; span=(0, 5), match='aaaaa'>
+
+In [332]: re.match('a{3,}', 'aaaaaa')
+Out[332]: <re.Match object; span=(0, 6), match='aaaaaa'>
+
+In [333]: re.match('a{,5}', 'aaaaaa')
+Out[333]: <re.Match object; span=(0, 5), match='aaaaa'>
+
+In [334]: re.match('a{,5}', 'a')
+Out[334]: <re.Match object; span=(0, 1), match='a'>
+```
+
+`{m,n}?`
+这是非贪婪模式。贪婪模式`a{3,5}` 匹配`aaaaa` 的结果是`aaaaa`，尽可能多的匹配。但是在非贪婪模式`a{3,5}?`下匹配`aaaaa`的结果是`aaa`。
+```python
+In [335]: re.match('a{,5}?', 'a')
+Out[335]: <re.Match object; span=(0, 0), match=''>
+
+In [336]: re.match('a{3,5}?', 'a')
+
+In [337]: re.match('a{3,5}?', 'aaaa')
+Out[337]: <re.Match object; span=(0, 3), match='aaa'>
+```
+
+`\`
+反斜杠这块没有没有完全弄清楚文档中想表达什么意思。
+你可以利用`\`来匹配特殊字符，例如`*`、`?`、`.`等。
+eg:
+```python
+In [346]: re.match('\.', '.')
+Out[346]: <re.Match object; span=(0, 1), match='.'>
+
+In [347]: re.match('\?', '?')
+Out[347]: <re.Match object; span=(0, 1), match='?'>
+```
+
+`[]`
+字符集合。
+- 在字符集合中，每个字符都可以单独匹配，eg：`[amk]` 可以匹配字符`a`、`m`或 `k`。
+```python
+In [350]: re.match("[amk]", "a")
+Out[350]: <re.Match object; span=(0, 1), match='a'>
+
+In [351]: re.match("[amk]", "m")
+Out[351]: <re.Match object; span=(0, 1), match='m'>
+
+In [352]: re.match("[amk]", "k")
+Out[352]: <re.Match object; span=(0, 1), match='k'>
+
+In [353]: re.match("[amk]", "amk")
+Out[353]: <re.Match object; span=(0, 1), match='a'>
+
+In [354]: re.search("[amk]", "amk")
+Out[354]: <re.Match object; span=(0, 1), match='a'>
+
+In [356]: re.findall("[amk]", "amk")
+Out[356]: ['a', 'm', 'k']
+```
+- 可以表示字符的范围，eg: `[a-z]`表示任意小写的ascii字符，`[0-9]`表示从0～9范围的整数。另外还有:`[A-Z]` 等。如果想表示任意16进制的数字，pattern可以这么写`[a-zA-Z0-9]`，如果要匹配`-`这个字符，可以通过`\`进行转义，eg: `[a\-z]`可以匹配的字符就变成了`a`、`-`、`z`了。除此之外，还可以将`-`放在集合中的第一个字符处或者最后一个字符处，eg: `[a-]` 或者 `[-a]`都可以匹配字符`-`。
+- 特殊字符在集合中失去了它们特殊的意义。eg: `[(+*)]` 可以匹配字符`(`、`+`、`*`、`)`。
+- 字符类，eg: `\w` 或者 `\S` 在字符集合中仍然能够发挥作用。
+- 如何表示不匹配某些字符？eg: 我想匹配除了0-9之外的所有字符，那如何处理呢？可以这样来：`[^0-9]`，注意`^` 必须放是集合中的第一个字符。
+- 如果我想在集合中匹配`]`，怎么处理呢？可以通过转义字符或者把这个字符放在集合中的首位。eg: `[()[\]{}]` 或者 `[]{}[{}]` 。
+`|`
+`A|B`，先按照pattern A进行匹配，如果匹配成功，不考虑B，如果A匹配失败，按模式B进行匹配，简单说就是按照标准“或”的关系执行。eg：
+```python
+In [358]: re.match(r'[0-9]|[A-Z]', '7A')
+Out[358]: <re.Match object; span=(0, 1), match='7'>
+
+In [359]: re.search(r'[0-9]|[A-Z]', '7A')
+Out[359]: <re.Match object; span=(0, 1), match='7'>
+
+In [360]: re.findall(r'[0-9]|[A-Z]', '7A')
+Out[360]: ['7', 'A']
+```
+
+`(...)`
+按照括号中pattern进行匹配，引入了group这个概念，匹配结束之后可以通过对应group编号获取匹配结果，也可以在后面的匹配中通过`\number`引用group的内容。
+eg：
+```python
+In [391]: re.match(r'([a-z]+)_([0-9]{5})_\1_\2', "zebra_89761_zebra_89761")
+Out[391]: <re.Match object; span=(0, 23), match='zebra_89761_zebra_89761'>
+
+In [392]: res = re.match(r'([a-z]+)_([0-9]{5})_\1_\2', "zebra_89761_zebra_89761")
+
+In [393]: res.group(0)
+Out[393]: 'zebra_89761_zebra_89761'
+
+In [394]: res.group(1)
+Out[394]: 'zebra'
+
+In [395]: res.group(2)
+Out[395]: '89761'
+```
+
+`(?...)`
+扩展机制，具体的扩展方式根据`?`后面的字符来确定。
+
+`(?aiLmsux)`
+起到的作用就是可以通过pattern传递flag，对应关系如下：
+`(?a)` —\> `re.A`
+`(?i)` —\> `re.I` 
+`(?L)` —\> `re.L`
+`(?m)` —\> `re.M`
+`(?s)` —\>  `re.S`
+`(?u)` —\> `re.U`
+`(?x)` —\> `re.X`
+怎么用？用`(?i)`举例：
+```python
+In [413]: re.match(r'(?i)([a-z]+)_([0-9]{5})_\1_\2', "zebrA_89761_zebrA_89761")
+Out[413]: <re.Match object; span=(0, 23), match='zebrA_89761_zebrA_89761'>
+
+In [416]: re.match(r'([a-z]+)_([0-9]{5})_\1_\2', "zebrA_89761_zebrA_89761", re.I)
+Out[416]: <re.Match object; span=(0, 23), match='zebrA_89761_zebrA_89761'>
+
+In [414]: re.match(r'([a-z]+)_([0-9]{5})_\1_\2', "zebrA_89761_zebrA_89761")
+None
+```
+
+`(?:...)`
+对比`(?...)`就会比较清晰，1. 不允许在匹配完成后，通过group引用；2. 不允许通过`\number` 引用group的内容作后续内容匹配。
+```python
+re.match(r'(?:[a-z]+)_([0-9]{5})_\1_\2', "zebra_89761_zebra_89761")
+// 这种写法就有问题，因为第一个group通过`?:`取消了，整个pattern就剩下一个pattern了，所以，后面“\2” 就找不到引用了，同时\1 实际对应的是([0-9]{5})这个pattern对应的内容
+// 可以改成下面这种写法
+re.match(r'(?:[a-z]+)_([0-9]{5})_[a-z]+_\1', "zebra_89761_zebra_89761")
+```
+
+`(?aiLmsux-imsx:...)`
+对单个group添加flag属性， `aiLmsux`对应的flag在前面已经列出了。
+```python
+In [431]: re.match(r"(?i:[a-z]+)_([a-z]+)", "ZEBRA_zebra")
+Out[431]: <re.Match object; span=(0, 11), match='ZEBRA_zebra'>
+
+In [432]: re.match(r"([a-z]+)_([a-z]+)", "ZEBRA_zebra")
+None
+In [445]: re.match(r"(?am-i:[a-z]+)_([a-z]+)", "ZEBRA_zebra", re.I)
+None
+In [446]: re.match(r"(?am:[a-z]+)_([a-z]+)", "ZEBRA_zebra", re.I)
+Out[446]: <re.Match object; span=(0, 11), match='ZEBRA_zebra'>
+```
+
+`(?P<name>...)`
+给group起个名字，当group很多的时候，单纯使用数字标记group在匹配完成后通过对应数字获取group的内容就会变得比较困难，可以通过这种方式给group起个名字，方便处理。另外，之前通过`\number`引用之前匹配上的内容，也可以通过`(?P=quote)`的方式实现。看例子吧，一目了然
+```python
+In [449]: re.match(r'(?P<animal>[a-z]+)_(?P<code>[0-9]{5})_(?P=animal)_(?P=code)', "zebra_89761_zebra_89761")
+Out[449]: <re.Match object; span=(0, 23), match='zebra_89761_zebra_89761'>
+
+In [450]: res = re.match(r'(?P<animal>[a-z]+)_(?P<code>[0-9]{5})_(?P=animal)_(?P=code)', "zebra_89761_zebra_89761")
+
+In [451]: res.group('animal')
+Out[451]: 'zebra'
+
+In [452]: res.group('code')
+Out[452]: '89761'
+
+In [458]: res.start('animal') // 对应字符串中的index
+Out[458]: 0
+
+In [459]: res.end('animal')
+Out[459]: 5
+
+In [460]: res.start('code')
+Out[460]: 6
+
+In [461]: res.end('code')
+Out[461]: 11
+```
+
+`(?P=name)`
+结合`(?P<name>)`使用，具体使用方法见`(?P<name>)`
+
+`(?#...)`
+相当于代码中的注释功能，注释了这个group，这个group变得无效了
+```python
+In [464]: re.match("([a-z]+)_([a-z]+)_", "_zebra_")
+
+In [465]: re.match("(?#[a-z]+)_([a-z]+)_", "_zebra_")
+Out[465]: <re.Match object; span=(0, 7), match='_zebra_'>
+```
+
+`(?=...)`
+这么解释吧，假设pattern为 AB，B表示`(?=...)`中的`...`，首先A一定得匹配成功，A匹配成功还不行，还得看B有没有匹配成功，只有B也匹配成功的情况下，才算匹配上。但是，B不占用group对应的`\number`，匹配结果中也无法通过`\number`获取B匹配的内容。注意：pattern AB中，A是想匹配的结果，除了A之外，后面的都要放到B中，否则就匹配不上，见例子中472行。
+```python
+In [472]: re.match("([a-z]+)_(?=[a-z]+)_", "zebra_zebra_")
+
+In [473]: re.match("([a-z]+)_(?=[a-z]+)", "zebra_zebra")
+Out[473]: <re.Match object; span=(0, 6), match='zebra_'>
+```
+
+`(?!...)`
+懂了上一条，这一条就非常好理解了。看例子吧。
+还是以pattern AB为例，A匹配成功 并且 B匹配不成功，才算匹配成功。
+```python
+// 注意482上改成这条规则，就匹配不上了，就是这个效果
+In [482]: re.match("([a-z]+)_(?![a-z]+)", "zebra_zebra")
+
+In [483]: re.match("([a-z]+)_(?![a-z]+)", "zebra_123")
+Out[483]: <re.Match object; span=(0, 6), match='zebra_'>
+```
+
+`(?<=...)`
+这个称之为 **lookbehind assertion**
+还是以pattern AB为例，这里A代表`(?<=...)`，例如pattern`(?<=[a-z]{4})_shanhai`，A对应`(?<=[a-z]{4}) `，B对应`_shanhai`。要求A和B同时匹配才能匹配成功。要求A必须是固定长度的字符串，像492行对应的A `(?<=[a-z]{1,4})` 就会报错“look-behind requires fixed-width pattern”。
+```python
+In [491]: re.search("(?<=[a-z]{4})_shanhai", "shao_shanhai")
+Out[491]: <re.Match object; span=(4, 12), match='_shanhai'>
+
+In [492]: re.search("(?<=[a-z]{1,4})_shanhai", "shao_shanhai")
+error : look-behind requires fixed-width pattern
+ 
+```
+
+`(?<!...)`
+**negative lookbehind assertion** 
+没什么好解释的，和上一条是相反的，看例子就能够明白。
+```python
+In [506]: re.search("(?<![a-z]{4})_shanhai", "shao_shanhai")
+
+In [507]: re.search("(?<![a-z]{4})_shanhai", "shao3_shanhai")
+Out[507]: <re.Match object; span=(5, 13), match='_shanhai'>
+
+In [508]: re.search("(?<![a-z]{4})_shanhai", "sha3_shanhai")
+Out[508]: <re.Match object; span=(4, 12), match='_shanhai'>
+
+In [509]: re.search("(?<![a-z]{1,4})_shanhai", "sha3_shanhai")
+```
+
+`(?(id/name)yes-pattern|no-pattern)`
+id 或者 name存在，使用yes-pattern，否则使用no-pattern。
+其中，no-pattern可以省略。
+eg，看官网的例子吧：`(<)?(\w+@\w+(?:\.\w+)+)(?(1)>|$)`
+目标：匹配上\<user@host.com\> 或 user@host.com
+不能匹配上：\<user@host.com 或 user@host.com\>
+1 对应的是`(<)`匹配的结果，如果匹配结果为空，执行`$`，否则匹配`>`。
+要求`<` 和 `>` 同时出现，或者同时不出现。
+
+`\number` 
+对应group匹配的内容，group开始数字为1。eg: `(.+) \1` 匹配`the the` 或 `55 55`。这个之前已经有多次应用了。
+
+`\A`
+效果和`^`一致。
+```python
+In [273]: re.match("\Ahello", "hello world")
+Out[273]: <re.Match object; span=(0, 5), match='hello'>
+
+In [274]: re.match("\Ahello", "not hello world")
+None
+```
+
+`\w`
+分unicode(str) pattern和 bytes pattern
+unicode patterns: 绝大多数构成word的字符以及数字和下划线。如果使用了asicc flag，只匹配`[a-zA-Z0-9_]`。
+bytes patterns: `[a-zA-Z0-9_]`。如果使用了LOCALE flag，匹配对应的字母以及下划线。
+```python
+In [543]: re.match('\w+', "风华绝代")
+Out[543]: <re.Match object; span=(0, 4), match='风华绝代'>
+
+In [544]: re.match('\w+', "风华12")
+Out[544]: <re.Match object; span=(0, 4), match='风华12'>
+
+In [545]: re.match('\w+', "风华12_")
+Out[545]: <re.Match object; span=(0, 5), match='风华12_'>
+```
+`\W`
+与`\w`反着来的。
+
+`\b`
+word边界，用`\b`定义一个要匹配的word。eg: `\bfoo\b`，匹配foo这个word，foo不能和`\w`连着，只能和`\W`连着。eg:可以匹配`foo.`、`(foo)`、`foo`，但是匹配不上`foobar`、`foo_`、`foo3`。
+```python
+In [551]: re.match('\bfoo\b', 'foo')
+
+In [552]: re.match(r'\bfoo\b', 'foo')
+Out[552]: <re.Match object; span=(0, 3), match='foo'>
+
+In [553]: re.match(r'\bfoo\b', 'foo.')
+Out[553]: <re.Match object; span=(0, 3), match='foo'>
+
+In [554]: re.search(r'\bfoo\b', '(foo)')
+Out[554]: <re.Match object; span=(1, 4), match='foo'>
+
+In [555]: re.match(r'\bfoo\b', 'foo3')
+
+In [556]: re.match(r'\bfoo\b', 'foobar')
+
+In [557]: re.match(r'\bfoo\b', 'foo_')
+```
+
+`\B`
+与`\b`效果相反。
+`r'py\B'`可以匹配`python`、`py3`、`py2`但是无法匹配`py`、`py.`、`py!`。
+我们这次用中文试试
+```python
+In [558]: re.match(r'风华\B', '风华_')
+Out[558]: <re.Match object; span=(0, 2), match='风华'>
+
+In [559]: re.match(r'风华\B', '风华正茂')
+Out[559]: <re.Match object; span=(0, 2), match='风华'>
+
+In [560]: re.match(r'风华\B', '风华.')
+
+In [561]: re.match(r'风华\B', '风华!')
+```
+
+`\d`
+unicode中的十进制数字（各种字符集合下的，不仅仅包含0-9）。ASCII flag下，就只有0-9。
+bytes patterns： `[0-9]`
+`\D`
+非十进制数字，在ASCII flag下，变成`[^0-9]`
+
+`\s`
+unicode(str) patterns: 包括 `[ \t\n\r\f\v]`以及其它语言下的空白字符。如果是ASCII flag下，就只有`[ \t\n\r\f\v]`。
+bytes patterns: `[ \t\n\r\f\v]`。
+`\S`
+非空白字符。
+`\Z`
+作用和`$`一致。
+
+## re模块 
+前面用的比较多的是match 方法和 search方法，其实re模块还有一些其它比较常用的方法。
+`re.compile(pattern, flags)`
+官网上的例子解释的其实很清楚了，用例子来说明吧
+```python
+prog = re.compile('[a-z]+')
+prog.match('zebra')
+```
+和下面这条语句的作用是一致的
+```python
+re.match('[a-z]+', 'zebra')
+```
+
+`re.search(pattern, string, flags=0)`
+在string中寻找第一个匹配pattern的sub string，找到之后就返回。
+注意：不会返回所有匹配的sub string。
+`re.match(pattern, string, flags=0)`
+从string的开始位置进行匹配，如果string的开始位置与pattern不匹配，返回None。注意和search的区别。
+`re.fullmatch(pattern, string, flags=0)`
+只有在整个string都匹配pattern的时候才认为匹配成功。
+
+举个例子说明上面三者之间的区别：
+```python
+In [26]: re.match("[a-z]+", "zebra 122")
+Out[26]: <re.Match object; span=(0, 5), match='zebra'>
+
+In [27]: re.search("[a-z]+", "zebra 122")
+Out[27]: <re.Match object; span=(0, 5), match='zebra'>
+
+In [28]: re.fullmatch("[a-z]+", "zebra 122")
+None
+
+In [29]: re.fullmatch("[a-z]+", "zebra")
+Out[29]: <re.Match object; span=(0, 5), match='zebra'>
+
+In [30]: re.match("[a-z]+", "0zebra")
+None
+
+In [31]: re.search("[a-z]+", "0zebra")
+Out[31]: <re.Match object; span=(1, 6), match='zebra'>
+```
+
+**字符串分割**
+简单的字符串分割可以直接使用string.split函数执行，复杂的字符串分割可以使用re模块提供的split函数，函数原型如下：
+`re.split(pattern, string, maxsplit, flags=0)`
+按照多个字符进行分割：
+```python
+In [47]: animals = "tiger, zebra: mouse giraffe"
+
+In [48]: re.split("\W+", animals)
+Out[48]: ['tiger', 'zebra', 'mouse', 'giraffe']
+
+In [49]: re.split("[,: ]+", animals)
+Out[49]: ['tiger', 'zebra', 'mouse', 'giraffe']
+```
+如何你想返回分割符，可以这么写：
+```python
+In [50]: re.split("([,: ]+)", animals)
+Out[50]: ['tiger', ', ', 'zebra', ': ', 'mouse', ' ', 'giraffe']
+```
+
+**查找所有匹配的结果**
+```python
+In [53]: animals = "tiger, zebra: mouse giraffe"
+
+In [59]: re.findall("[a-z]+", animals)
+Out[59]: ['tiger', 'zebra', 'mouse', 'giraffe']
+
+In [54]: re.findall("([a-z]+)", animals)
+Out[54]: ['tiger', 'zebra', 'mouse', 'giraffe']
+
+// 如果在pattern中指定了多个group，返回的list中的元素是tuple类型
+// tuple中的元素为group匹配的结果，按照先后顺序存储
+In [55]: re.findall("([a-z]+)(\W+)", animals)
+Out[55]: [('tiger', ', '), ('zebra', ': '), ('mouse', ' ')]
+```
+
+数据比较多的情况下，可以使用`re.finditer(pattern, string, flags=0)`方法，返回的是iterator类型
+```python
+In [64]: animals = "tiger, zebra: mouse giraffe"
+
+In [65]: re.finditer("([a-z]+)(\W+)", animals)
+Out[65]: <callable_iterator at 0x1068d3ba8>
+
+In [66]: for item in re.finditer("([a-z]+)(\W+)", animals):
+    ...:     print(item)
+    ...:
+<re.Match object; span=(0, 7), match='tiger, '>
+<re.Match object; span=(7, 14), match='zebra: '>
+<re.Match object; span=(14, 20), match='mouse '>
+
+// 如何通过iter获取匹配结果中相应group的内容呢？
+// 可以直接通过index获取，index=0 取的是pattern整个匹配的结果
+// index=1 获取的是pattern中group 1 匹配的结果
+// index=2 获取的是pattern中group 2 匹配的结果
+// 举例说明
+In [78]: res = re.finditer("([a-z]+)(\W+)", animals)
+
+In [79]: next(res)
+Out[79]: <re.Match object; span=(0, 7), match='tiger, '>
+
+In [80]: res = re.finditer("([a-z]+)(\W+)", animals)
+
+In [81]: iter_match = re.finditer("([a-z]+)(\W+)", animals)
+
+In [82]: res = next(iter_match)
+
+In [83]: print(res[0])
+tiger,
+
+In [84]: print(res[1])
+tiger
+
+In [85]: print(res[2])
+```
+
+**字符串替换**
+简单的字符串替换可以使用string.replace函数，复杂的替换可以使用`re.sub(pattern, repl, string, count=0, flags=0)`
+例如，我想把
+```python
+def myfunc():
+```
+替换成
+```python
+static PyObject* 
+py_myfunc(void)
+{
+```
+用string.replace函数显然是无法一步完成的。可以借助re.sub函数
+```python
+string = "def myfunc():"
+pattern = r'def\s+([a-zA-z_][a-zA-Z0-9_]*)\s*\(\s*\):'
+repl = r'static PyObject*\npy_\1(void)\n{'
+```
+执行替换
+```python
+In [90]: print(re.sub(pattern, repl, string))
+static PyObject*
+py_myfunc(void)
+{
+```
+
+其中第re.sub的第二个参数repl可以是一个string（像上面的例子那样），也可以是一个函数，eg：
+我想把`pro----gram-files`变成`pro--gram files`
+我们可以对`--`和 `-`区别处理。
+```python
+In [95]: pattern = "-{1,2}" # 贪婪模式\
+
+In [96]: # 区别处理-- 和 -
+    ...: def dashrepl(matchobj):
+    ...:     if matchobj.group(0) == '-':
+    ...:         return ' '
+    ...:     else:
+    ...:         return '-'
+    ...:
+
+In [97]: string = "pro----gram-files"
+
+In [98]: re.sub(pattern, dashrepl, string)
+Out[98]: 'pro--gram files'
+```
+
+**参数count**确定执行替换的次数。
+还是以上面的例子，如果不想对对最后一个`-`进行替换，可以这么处理：
+```python
+In [99]: re.sub(pattern, dashrepl, string, 2)
+Out[99]: 'pro--gram-files'
+```
+
+需要注意的问题：
+[正则表达式101][1]
+在3.7 这个版本中，新增了一项规则：`Empty matches for the pattern are replaced when adjacent to a previous non-empty match`
+但是我觉得，这样理解起来可能更容易：
+`Empty matches for the pattern are replaced when not adjacent to a previous empty match`
+这是关于空匹配的处理规则，eg: `re.sub('x*', '-', 'abxd')` 结果会是怎样的？
+`x*` 会产生空匹配，临近的非空匹配是`x`，空匹配发生的地方有`|a|bx|d|`，所以，结果是 `-a-b--d-`
+```python
+In [114]: re.sub('x*', '-', 'abxd')
+Out[114]: '-a-b--d-'
+```
+附一下3.7关于这个规则的改动：[https://github.com/python/cpython/commit/fbb490fd2f38bd817d99c20c05121ad0168a38ee][2]
+如果你想知道替换了几次，可以使用`re.subn(pattern, repl, string, count=0, flags=0)`这个函数，调用方式是一样的，区别在于返回结果是一个元组，tuple中第二个元素就是替换的次数
+```python
+In [119]: re.subn(r"\b|:+", "-", "a::bc")
+Out[119]: ('-a---bc-', 5)
+```
+
+**转义特殊字符**
+`re.escape（pattern)`这个函数可以转义pattern中特殊字符。eg：
+```python
+In [120]: print(re.escape('http://www.python.org'))
+http://www\.python\.org
+```
+可以帮助你写正则表达式。
+
+
+[1]:	[https://regex101.com/r/zTpV1t/3]
+[2]:	https://github.com/python/cpython/commit/fbb490fd2f38bd817d99c20c05121ad0168a38ee

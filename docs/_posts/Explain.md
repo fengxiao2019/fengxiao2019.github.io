@@ -1,0 +1,74 @@
+# Explain
+
+```
+explain SELECT count(*) as total_count, owner_org_id as obj_id, urgent_insert
+FROM demand_statistic_info demand_stat
+         JOIN demand_data demand ON demand.id = demand_stat.demand_id and state = 1
+WHERE `demand_stat`.`owner_org_id` IN
+      (3815702, 454368661, 454837291, 454850399, 454852344, 485131669, 485286510, 486093036, 486099028)
+GROUP BY demand_stat.owner_org_id, demand.urgent_insert;
+```
+
+优化之前：
+| id | select\_type | table | partitions | type | possible\_keys | key | key\_len | ref | rows | filtered | Extra |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| 1 | SIMPLE | demand\_stat | NULL | range | idx\_demand\_id,idx\_owner\_org\_id | idx\_owner\_org\_id | 4 | NULL | 54 | 100 | Using index condition; Using temporary; Using filesort |
+| 1 | SIMPLE | demand | NULL | eq\_ref | PRIMARY,idx\_state | PRIMARY | 4 | fuxi\_data.demand\_stat.demand\_id | 1 | 93.39 | Using where |
+
+添加索引：
+
+```alter table demand_statistic_info add index idx_org_demand_id (owner_org_id, demand_id);
+```
+
+优化之后：
+| id | select\_type | table | partitions | type | possible\_keys | key | key\_len | ref | rows | filtered | Extra |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| 1 | SIMPLE | demand\_stat | NULL | range | idx\_demand\_id,idx\_owner\_org\_id,idx\_org\_demand\_id | idx\_org\_demand\_id | 4 | NULL | 54 | 100 | Using where; Using index; Using temporary; Using filesort |
+| 1 | SIMPLE | demand | NULL | eq\_ref | PRIMARY,idx\_state,idx\_state\_urgent | PRIMARY | 4 | fuxi\_data.demand\_stat.demand\_id | 1 | 93.39 | Using where |
+
+## Extra列说明：
+extra额外提供了一些MySQL 是如何处理查询的信息，需要额外关注using filesort，using temporary。
+下面列出来可能出现在Extra列的选项。
+### using where
+> The only thing that would be better than Using where is Using where; Using index with a "covering index". Try selecting just uid and created_date.
+
+> Using where is fine. It means it's applying the indicated index to the WHERE clause and reducing the rows returned. To get rid of it, you'd have to get rid of the WHERE clause.
+
+> Here are things that you should be concerned about:
+
+> - Using filesort
+> - Using temporary
+> - Not using an index: NULL in the 'key' column of the EXPLAIN and a large number of rows in the 'rows' column.
+
+> Your EXPLAIN result shows that MySQL is applying index1 to the WHERE clause and returning 2 rows:
+
+### using index
+查询走的是覆盖索引，不需要回表查询。
+
+### using index condition
+在需要回表的查询中，无法完全利用组合索引的字段（最左匹配原则），但是组合索引的数据可以用来过滤索引中返回的数据。
+例如：组合索引A,B
+查询条件是A > m and B = n
+这种情况下，只能利用组合索引的A部分，不能完全利用组合索引。
+但是，我们可以利用B=n进行过滤掉一部分数据，减少回表查询的数量，也就降低了随机IO的数量（走了MRR除外）。
+这种策略称为索引下沉（push down）。
+可以通过 `set optimizer_switch='index_condition_pushdown=off';` 关闭索引下沉。
+
+```
+explain select demand_id, demand_name from demand_statistic_info where owner_org_id > 90591673  and owner_org_id < 344353761  and demand_id = 32423;
+```
+| id | select\_type | table | partitions | type | possible\_keys | key | key\_len | ref | rows | filtered | Extra |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| 1 | SIMPLE | demand\_statistic\_info | NULL | range | idx\_org\_demand\_id | idx\_org\_demand\_id | 4 | NULL | 87 | 10 | Using index condition |
+
+
+### using temporary
+为了解决该查询，MySQL需要创建一个临时表来保存结果。如果查询包含GROUP BY和ORDER BY子句，以不同方式列出列，通常会发生这种情况。
+
+### using filesort
+数据量比较大，内存排序无法满足，需要用到文件排序。做法：
+获取排序的id, sort field1,sor field2
+存储到文件，排序，然后按照排序号的id 获取完整的查询字段数据，返回
+
+### Using MRR
+Tables are read using the Multi-Range Read optimization strategy. 

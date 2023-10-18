@@ -1,0 +1,129 @@
+# pytest 配置文件
+pytest 命令行选项和配置文件中 key 、value 说明 都可以通过 `pytest -h` 获取。
+
+pytest 支持的配置文件有四种：
+- pytest.int
+- pyproject.toml
+- tox.ini
+- setup.cfg
+推荐使用前面三种，因为第四种采用的解析器和前面三种不同，并且很难排查问题，所以推荐使用 `pytst.ini pyproject.toml tox.ini`，但是，注意：`pytest.ini` 配置文件的优先级高于其它配置文件。
+
+**pytest.ini 配置文件格式**
+pytest.ini文件优先于其他文件，即使是空的。
+```
+# pytest.ini
+[pytest]
+minversion = 6.0
+addopts = -ra -q
+testpaths =
+    tests
+    integration
+```
+**pyproject.toml 配置文件的格式**
+pyproject.toml中含有tool.pytest.ini_options表时，才会考虑进行配置。
+```
+# pyproject.toml
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = "-ra -q"
+testpaths = [
+    "tests",
+    "integration",
+]
+```
+**tox.ini配置文件的格式**
+tox.ini 文件是 tox 项目的配置文件，如果它们有 `[pytest]` 部分，也可以用来保存 pytest 配置。
+redis-py 采用的配置文件就是这种格式。
+```
+# tox.ini
+[pytest]
+minversion = 6.0
+addopts = -ra -q
+testpaths =
+    tests
+    integration
+
+```
+
+## 如何确定 `rootdir` 和 配置文件
+pytest为每次测试运行确定一个 `rootdir` ，这取决于命令行参数（指定的测试文件、路径）和配置文件的存在。确定的rootdir和配置文件在启动时作为pytest 头的一部分被打印出来。
+以下面这条测试命令为例子：
+```
+pytest tests/test_statistic.py::TestDemandShortestDuration -k actual_submit_test_query
+```
+输出结果如下：
+```
+======================================================================================================= test session starts =======================================================================================================
+platform darwin -- Python 3.6.8, pytest-7.0.1, pluggy-0.13.1
+rootdir: /wkspace/all_in_one_service, configfile: pytest.ini
+plugins: env-0.6.2
+collected 20 items / 19 deselected / 1 selected                                                                                                                                                                                   
+
+tests/test_statistic.py .                                                                                                                                                                                                   [100%]
+
+================================================================================================ 1 passed, 19 deselected in 1.78s =================================================================================================
+```
+从上面输出的信息中可以看出：
+```
+rootdir: /wkspace/all_in_one_service, configfile: pytest.ini
+```
+下面是pytest使用rootdir的摘要：
+
+在收集测试用例的过程中构建节点标识；每个测试都被分配一个唯一的节点标识，该标识以rootdir为根，并考虑到全路径、类名、函数名和参数化（如果有的话）。
+
+被插件用作存储项目/测试运行特定信息的位置；例如，`cache` 插件在**rootdir**中创建一个 `.pytest_cache` 子目录来存储其跨测试运行状态。
+
+rootdir 不能用来修改 sys.path/PYTHONPATH 或影响模块的导入方式。更多细节请参见pytest导入机制和sys.path/PYTHONPATH。
+
+**--rootdir=path**命令行选项可以用来强制指定一个目录。注意，与其他命令行选项相反，**--rootdir**不能与pytest.ini内的**addopts**一起使用，因为 **rootdir** 已经被用来查找 pytest.ini 。
+
+### pytest 是如何找到 `rootdir`的？
+step1: 根据pytest 命令行的 `args` （pytest a b，a 和 b就是args），
+确定指定的`args`的最近公共祖先目录，如果路径不存在，最近公共祖先目录将被设置为当前工作目录。
+
+step2: 在祖先目录中寻找**pytest.ini**、**pyproject.toml**、**tox.ini**和**setup.cfg**文件，并往上找。如果有一个被匹配，它就成为配置文件，其目录就成为**rootdir**。
+
+step3: 如果没有找到配置文件，则从共同的祖先目录向上寻找setup.py以确定根目录。
+
+step4: 如果没有找到setup.py，则在每个指定的args和向上寻找pytest.ini、pyproject.toml、tox.ini和setup.cfg。如果有一个被匹配，它就成为配置文件，其目录就成为rootdir。
+
+step5: 如果没有找到配置文件，则使用已经确定的共同祖先作为根目录。这允许在不属于软件包的结构中使用pytest，并且没有任何特定的配置文件。
+
+如果没有给出args，pytest会收集当前工作目录下的测试，也会从那里开始确定rootdir。
+
+文件只有在以下情况下才会被匹配配置：
+- pytest.ini：将始终匹配并优先考虑，即使是空的。
+- pyproject.toml：包含一个[tool.pytest.ini_options]表。
+- tox.ini：包含一个[pytest]部分。
+- setup.cfg：包含一个[tool:pytest]部分。
+这些文件是按照上述顺序考虑的。来自多个候选配置文件的选项不会被合并，第一个匹配者获胜。
+
+内部配置对象（可通过钩子或 pytestconfig 固定装置访问）随后将携带这些属性。
+
+config.rootpath：确定的根目录，保证存在。
+
+config.inipath：确定的配置文件，可以是无（由于历史原因，它被命名为inipath）。
+
+6.1版中的新内容。config.rootpath和config.inipath属性。它们是旧的 config.rootdir 和 config.inifile 的 pathlib.Path 版本，它们的类型是 py.path.local，为了向后兼容而仍然存在。
+
+rootdir被用作构建测试地址（"nodeids"）的参考目录，也可以被插件用来存储每个测试运行的信息。
+以：
+```
+pytest path/to/testdir path/other/
+```
+为例：
+将确定共同的祖先为`path`，然后检查配置文件，如下所示：
+```
+# first look for pytest.ini files
+path/pytest.ini
+path/pyproject.toml  # must contain a [tool.pytest.ini_options] table to match
+path/tox.ini         # must contain [pytest] section to match
+path/setup.cfg       # must contain [tool:pytest] section to match
+pytest.ini
+... # all the way up to the root
+
+# now look for setup.py
+path/setup.py
+setup.py
+... # all the way up to the root
+```

@@ -1,0 +1,28 @@
+# Read View          
+InnoDB支持MVCC多版本，其中RC 和RR 隔离级别是利用consistent read view的方式支持的。
+innodb 的每一条记录都会额外添加三个字段：
+ - DB_TRX_ID 6个字节，插入或者更新行的最后一个事务的标识（删除在innodb中被认为是更新，会在行中有一个特殊的bit标志该行被删除）
+ - DB_ROLL_PTR 7个字节 回滚指针指向写入回滚段的undo log record
+ - DB_ROW_ID 6个字节 ，如果 InnoDB 自动生成聚集索引，则索引包含行 ID 值。否则，DB_ROW_ID 列不会出现在任何索引中。
+
+read view中保存的trx_sys状态主要包括：
+
+- low_limit_id: 低水位线，>= view->lw_limit_id 的事务不可见
+- up_limit_id: 高水位线， < view->up_limit_id 的事务是可见的
+- low_limit_no: trx_no 小于view->low_limit_no 的undo log 对于view是可以purge的
+- rx_trx_ids: 读写事务数组
+
+RR隔离级别（除了Gap锁之外）和RC隔离级别的差别是创建snapshot时机不同。 
+- RR隔离级别是在事务开始时刻，确切地说是第一个读操作创建read view的；
+- RC隔离级别是在语句开始时刻创建read view的。
+
+Read view创建之后，如何进行可见性判断？
+读数据时比较记录最后更新的**trx_id**和view的**high/low water mark**和rx_trx_ids。
+case1： 
+> 如果记录最新数据是当前事务trx的更新结果，对应当前read view一定是可见的。
+> trx_id < view->up_limit_id 的记录对于当前view 一定是可见的
+> trx_id >= view->low_limig_id 的记录对于当前read view 是一定不可见的。
+> trx_id落在[up_limit_id, low_limit_id)，需要在活跃读写事务数组查找trx_id是否存在，如果存在，记录对于当前read view是不可见的。
+
+  
+
