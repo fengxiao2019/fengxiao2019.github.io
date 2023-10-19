@@ -1,23 +1,20 @@
 import os
-import re
-import random
-from datetime import datetime, timedelta
 
-def sanitize_filename(filename):
-    return filename.replace("'", "").replace(" ", "")
+def remove_lines(file_path):
+    with open(file_path, 'r') as file:
+        lines = file.readlines()
 
-def strip_date(filename):
-    return re.sub(r'^\d{4}-\d{2}-\d{2}-', '', filename)
+    lines_to_remove = [
+        'layout:', 
+        'title:', 
+        'date:',
+        'category:'
+    ]
 
-def random_date(start_year=2019, end_year=2022):
-    start_date = datetime(start_year, 1, 1)
-    end_date = datetime(end_year, 12, 31)
+    lines = [line for line in lines if not any(line.startswith(prefix) for prefix in lines_to_remove)]
 
-    time_between_dates = end_date - start_date
-    random_number_of_days = random.randrange(time_between_dates.days)
-    random_date = start_date + timedelta(days=random_number_of_days)
-
-    return random_date.strftime('%Y-%m-%d')
+    with open(file_path, 'w') as file:
+        file.writelines(lines)
 
 # specify directory
 directory = '.'
@@ -25,10 +22,6 @@ directory = '.'
 for dirpath, dirnames, filenames in os.walk(directory):
     for filename in filenames:
         if filename.endswith('.md'):
-            sanitized_filename = sanitize_filename(filename)
-            sanitized_filename_without_date = strip_date(sanitized_filename)
-            new_filename = f"{random_date()}-{sanitized_filename_without_date}"
-            source = os.path.join(dirpath, filename)
-            destination = os.path.join(dirpath, new_filename)
-            os.rename(source, destination)
-            print(f'Renamed file {source} to {destination}')
+            file_path = os.path.join(dirpath, filename)
+            remove_lines(file_path)
+            print(f'Removed specific lines from file {file_path}')

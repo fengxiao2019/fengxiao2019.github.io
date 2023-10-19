@@ -1,7 +1,3 @@
-layout: post
-title: "Python GIL的存在，为什么还需要线程锁？"
-date: 2023-10-19 23:33:19 -0000
-categories: BaseException, Python, Exception
 
 # Python GIL的存在，为什么还需要线程锁？
 

@@ -1,6 +1,3 @@
-layout: post
-title: "protobuf   version 3"
-date: 2023-10-19 23:33:19 -0000
 
 # protobuf - version 3
 本指南介绍了如何使用协议缓冲区语言来构建你的协议缓冲区数据，包括.proto文件语法以及如何从你的.proto文件中生成数据访问类。它涵盖了proto3版本的协议缓冲区语言：关于proto2语法的信息，请参阅Proto2语言指南。

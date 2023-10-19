@@ -1,12 +1,3 @@
-layout: post
-title: "BaseException vs Exception"
-date: 2023-10-19 23:33:19 -0000
-categories: BaseException, Python, Exception
-
-layout: post
-title: "BaseException vs Exception"
-date: 2022-04-10 20:23:01 -0000
-categories: BaseException, Python, Exception
 
 # BaseException vs Exception
 ## 为什么关注这个问题？
