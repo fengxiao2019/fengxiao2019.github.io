@@ -26,7 +26,7 @@ title: KEEP LEARNING
 #  Google search results) and in your feed.xml site description.
 baseurl: "" # the subpath of your site, e.g. /blog
 url: "https://my.mangguorou.cn" # the base hostname & protocol for your site, e.g. http://example.com
-
+permalink: /blog/:title/
 # Build settings
 theme: minima
   # remote_theme: pages-themes/architect@v0.2.0
@@ -53,3 +53,4 @@ plugins:
 #   - vendor/cache/
 #   - vendor/gems/
 #   - vendor/ruby/
+
